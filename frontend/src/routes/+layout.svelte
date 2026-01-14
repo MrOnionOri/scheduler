@@ -20,11 +20,16 @@
         ...s,
         me,
         features: new Set(feats.features),
-        ready: true
+        ready: true,
       }));
     } catch {
       // no auth o token inválido
-      auth.update((s) => ({ ...s, me: null, features: new Set(), ready: true }));
+      auth.update((s) => ({
+        ...s,
+        me: null,
+        features: new Set(),
+        ready: true,
+      }));
     }
   });
 
@@ -40,9 +45,12 @@
   <!-- Si este archivo existe en /static/vendor/fullcalendar/ -->
 </svelte:head>
 
-<nav style="display:flex; gap:12px; padding:12px; border-bottom:1px solid #ddd;">
+<nav
+  style="display:flex; gap:12px; padding:12px; border-bottom:1px solid #ddd;"
+>
   <a href="/" style="font-weight:700;">Scheduler</a>
   <a href="/scheduler">Agenda</a>
+  <a href="/teams">Equipos</a>
 
   {#if isBeta}
     <a href="/beta">Beta</a>

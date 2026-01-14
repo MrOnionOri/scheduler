@@ -8,6 +8,8 @@ from app.models.project import Project
 from app.models.membership import Membership
 from app.schemas.team import AddMemberIn, MembershipOut, SetLeaderIn
 from app.services.permissions import can_manage_project, is_pl_of_team, can_access_project
+from app.schemas.team import AddMemberIn, MembershipOut, SetLeaderIn, TeamCreateIn, TeamUpdateIn, TeamOut
+
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -98,3 +100,86 @@ def set_leader(
         db.commit()
 
     return {"status": "ok", "leader_user_id": payload.user_id}
+
+@router.get("", response_model=list[TeamOut])
+def list_teams(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Permiso para ver proyecto
+    if not can_access_project(db, user, project_id):
+        raise HTTPException(status_code=403, detail="No access")
+
+    rows = db.query(Team).filter(Team.project_id == project_id).order_by(Team.id.asc()).all()
+    return [TeamOut(id=t.id, project_id=t.project_id, name=t.name, color_hex=getattr(t, "color_hex", None)) for t in rows]
+
+
+@router.post("", response_model=TeamOut)
+def create_team(
+    payload: TeamCreateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Solo Admin/Manager del proyecto
+    if not can_manage_project(db, user, payload.project_id):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    # valida project existe
+    project = db.get(Project, payload.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    t = Team(
+        project_id=payload.project_id,
+        name=payload.name.strip(),
+        color_hex=payload.color_hex
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return TeamOut(id=t.id, project_id=t.project_id, name=t.name, color_hex=t.color_hex)
+
+
+@router.patch("/{team_id}", response_model=TeamOut)
+def update_team(
+    team_id: int,
+    payload: TeamUpdateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Solo Admin/Manager del proyecto
+    if not can_manage_project(db, user, team.project_id):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    if payload.name is not None:
+        team.name = payload.name.strip()
+    if payload.color_hex is not None:
+        team.color_hex = payload.color_hex
+
+    db.commit()
+    db.refresh(team)
+    return TeamOut(id=team.id, project_id=team.project_id, name=team.name, color_hex=getattr(team, "color_hex", None))
+
+
+@router.delete("/{team_id}", response_model=dict)
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    # Solo Admin/Manager del proyecto
+    if not can_manage_project(db, user, team.project_id):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    db.delete(team)
+    db.commit()
+    return {"status": "ok"}
